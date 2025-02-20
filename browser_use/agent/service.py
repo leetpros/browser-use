@@ -4,6 +4,9 @@ import asyncio
 import json
 import logging
 import re
+import os
+import base64
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, Type, TypeVar
 
@@ -120,6 +123,7 @@ class Agent(Generic[Context]):
 		page_extraction_llm: Optional[BaseChatModel] = None,
 		planner_llm: Optional[BaseChatModel] = None,
 		planner_interval: int = 1,  # Run planner every N steps
+		save_screenshots_path: Optional[str] = None,
 		# Inject state
 		injected_agent_state: Optional[AgentState] = None,
 		#
@@ -130,6 +134,7 @@ class Agent(Generic[Context]):
 			use_vision_for_planner=use_vision_for_planner,
 			save_conversation_path=save_conversation_path,
 			save_conversation_path_encoding=save_conversation_path_encoding,
+			save_screenshots_path=save_screenshots_path,
 			max_failures=max_failures,
 			retry_delay=retry_delay,
 			system_prompt_class=system_prompt_class,
@@ -205,6 +210,12 @@ class Agent(Generic[Context]):
 
 		if self.settings.save_conversation_path:
 			logger.info(f'Saving conversation to {self.settings.save_conversation_path}')
+
+		self.save_screenshots_path = save_screenshots_path
+		self.execution_steps = []
+
+		if self.settings.save_screenshots_path:
+			logger.info(f'Saving screenshot to {self.settings.save_screenshots_path}')
 
 	def _set_browser_use_version_and_source(self) -> None:
 		"""Get the version and source of the browser-use package (git or pip in a nutshell)"""
@@ -285,6 +296,22 @@ class Agent(Generic[Context]):
 
 		try:
 			state = await self.browser_context.get_state()
+   
+			# Capture screenshot before action
+			screenshot_path = None
+			if self.settings.save_screenshots_path:
+				# Create directory if it doesn't exist
+				os.makedirs(self.settings.save_screenshots_path, exist_ok=True)
+				screenshot_b64 = state.screenshot
+				if screenshot_b64:
+					filename = await self.browser_context._get_unique_filename(
+						self.settings.save_screenshots_path, 
+						f"step_{self.state.n_steps}.png"
+					)
+					filepath = os.path.join(self.settings.save_screenshots_path, filename)
+					with open(filepath, "wb") as f:
+						f.write(base64.b64decode(screenshot_b64))
+					screenshot_path = os.path.abspath(filepath)
 
 			self._raise_if_stopped_or_paused()
 
@@ -309,6 +336,8 @@ class Agent(Generic[Context]):
 					await self.register_new_step_callback(state, model_output, self.state.n_steps)
 
 				if self.settings.save_conversation_path:
+					# Create directory for conversation logs if it doesn't exist
+					os.makedirs(os.path.dirname(self.settings.save_conversation_path), exist_ok=True)
 					target = self.settings.save_conversation_path + f'_{self.state.n_steps}.txt'
 					save_conversation(input_messages, model_output, target, self.settings.save_conversation_path_encoding)
 
@@ -359,6 +388,18 @@ class Agent(Generic[Context]):
 
 			if state:
 				self._make_history_item(model_output, state, result)
+    
+			# Add to execution history
+			if model_output and screenshot_path:
+				self.execution_steps.append({
+					"step": self.state.n_steps,
+					"actions": [action.model_dump(exclude_unset=True) for action in model_output.action],
+					"screenshot": screenshot_path,
+					"timestamp": datetime.now().isoformat()
+				})
+
+			if self.settings.save_screenshots_path:
+				await self._generate_execution_report()
 
 	async def _handle_step_error(self, error: Exception) -> list[ActionResult]:
 		"""Handle all types of errors that can occur during a step"""
@@ -873,3 +914,76 @@ class Agent(Generic[Context]):
 	@property
 	def message_manager(self) -> MessageManager:
 		return self._message_manager
+
+	async def _generate_execution_report(self):
+		if not self.execution_steps:
+			return
+
+		# Technical details report
+		technical_path = os.path.join(str(self.settings.save_screenshots_path), "technical_details.md")
+		with open(technical_path, "w") as f:
+			f.write("# Technical Execution Details\n\n")
+			f.write(f"**Task:** {self.task}\n\n")
+			f.write("## Detailed Steps\n\n")
+			
+			for step in self.execution_steps:
+				f.write(f"### Step {step['step']}\n")
+				f.write(f"**Timestamp:** {step['timestamp']}\n\n")
+				f.write("**Actions Taken:**\n")
+				for action in step["actions"]:
+					f.write(f"- {json.dumps(action)}\n")
+				f.write(f"\n**Screenshot:** `{step['screenshot']}`\n\n")
+				f.write("---\n")
+
+		# Human-friendly main report
+		await self._generate_ai_summary_report()
+
+	async def _generate_ai_summary_report(self):
+		try:
+			report_path = os.path.join(str(self.settings.save_screenshots_path), "ai_summary_report.md")
+			
+			# Generate descriptive narrative
+			prompt = [
+				SystemMessage(
+					content="Create a step-by-step exploration report that combines:\n"
+							"1. Human-readable descriptions of actions\n"
+							"2. Technical details from the original execution steps\n"
+							"Format each step as:\n"
+							"### Step [N]\n"
+							"**Action:** Natural language description\n"
+							"**Technical Details:**\n"
+							"- Timestamp: [value]\n"
+							"- Actions: [JSON list]\n"
+							"- Screenshot: [path]"
+				),
+				HumanMessage(
+					content=f"Task: {self.task}\n\n"
+							f"Raw Steps Data:\n{json.dumps(self.execution_steps, indent=2)}"
+				)
+			]
+			
+			response = await self.llm.ainvoke(prompt)
+			
+			with open(report_path, "w") as f:
+				f.write("# Combined Exploration Report\n\n")
+				f.write(f"**Task:** {self.task}\n\n")
+				f.write(str(response.content))
+				
+			# Preserve original technical format
+			technical_path = os.path.join(str(self.settings.save_screenshots_path), "technical_details.md")
+			with open(technical_path, "w") as f:
+				f.write("# Technical Execution Details\n\n")
+				for step in self.execution_steps:
+					f.write(f"## Step {step['step']}\n")
+					f.write(f"**Timestamp:** {step['timestamp']}\n")
+					f.write("**Actions:**\n")
+					for action in step["actions"]:
+						f.write(f"- {json.dumps(action)}\n")
+					f.write(f"**Screenshot:** {step['screenshot']}\n\n")
+
+		except Exception as e:
+			logger.error(f"Failed to generate AI summary report: {str(e)}")
+			# Create empty report to indicate failure
+			with open(report_path, "w") as f:
+				f.write("# Summary Report Unavailable\n")
+				f.write("Failed to generate AI-powered summary due to technical error.")

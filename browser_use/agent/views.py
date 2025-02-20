@@ -32,6 +32,7 @@ class AgentSettings(BaseModel):
 	use_vision_for_planner: bool = False
 	save_conversation_path: Optional[str] = None
 	save_conversation_path_encoding: Optional[str] = 'utf-8'
+	save_screenshots_path: Optional[str] = None
 	max_failures: int = 3
 	retry_delay: int = 10
 	system_prompt_class: Type[SystemPrompt] = SystemPrompt
@@ -112,9 +113,9 @@ class AgentOutput(BaseModel):
 
 	current_state: AgentBrain
 	action: list[ActionModel] = Field(
-		...,  # This means the field is required
+		...,  # Required field
 		description="List of actions to execute",
-		min_items=1,  # Ensure at least one action is provided
+		json_schema_extra={"min_items": 1}  # Updated validation syntax
 	)
 
 	@staticmethod
@@ -128,7 +129,7 @@ class AgentOutput(BaseModel):
 				Field(
 					...,
 					description="List of actions to execute",
-					min_items=1
+					json_schema_extra={"min_items": 1}  # Updated validation syntax
 				)
 			),
 			__module__=AgentOutput.__module__,
