@@ -107,6 +107,9 @@ class BrowserContextConfig:
 
 	    include_dynamic_attributes: bool = True
 	        Include dynamic attributes in the CSS selector. If you want to reuse the css_selectors, it might be better to set this to False.
+
+	    save_screenshots_path: Optional[str] = None
+	        Path to save screenshots
 	"""
 
 	cookies_file: str | None = None
@@ -134,6 +137,7 @@ class BrowserContextConfig:
 	include_dynamic_attributes: bool = True
 
 	_force_keep_context_alive: bool = False
+	save_screenshots_path: Optional[str] = None
 
 
 @dataclass
@@ -661,6 +665,18 @@ class BrowserContext:
 			)
 
 			screenshot_b64 = await self.take_screenshot()
+			
+			# Save screenshot when focus element is specified
+			if focus_element > -1 and self.config.save_screenshots_path:
+				os.makedirs(self.config.save_screenshots_path, exist_ok=True)
+				filename = await self._get_unique_filename(
+					self.config.save_screenshots_path,
+					f"focus_{focus_element}.png"
+				)
+				filepath = os.path.join(self.config.save_screenshots_path, filename)
+				with open(filepath, "wb") as f:
+					f.write(base64.b64decode(screenshot_b64))
+
 			pixels_above, pixels_below = await self.get_scroll_info(page)
 
 			self.current_state = BrowserState(
@@ -939,8 +955,8 @@ class BrowserContext:
 		"""
 		try:
 			# Highlight before typing
-			# if element_node.highlight_index is not None:
-			# 	await self._update_state(focus_element=element_node.highlight_index)
+			if element_node.highlight_index is not None:
+				await self._update_state(focus_element=element_node.highlight_index)
 
 			element_handle = await self.get_locate_element(element_node)
 
@@ -976,8 +992,8 @@ class BrowserContext:
 
 		try:
 			# Highlight before clicking
-			# if element_node.highlight_index is not None:
-			# 	await self._update_state(focus_element=element_node.highlight_index)
+			if element_node.highlight_index is not None:
+				await self._update_state(focus_element=element_node.highlight_index)
 
 			element_handle = await self.get_locate_element(element_node)
 
