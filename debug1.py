@@ -81,9 +81,9 @@ if not api_key:
 	raise ValueError('GEMINI_API_KEY is not set')
 # llm = ChatOpenAI(model="gpt-4o")
 llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp', api_key=SecretStr(api_key), temperature=0.0)
-sensitive_data={ "name": "testadmin2", "password": "hashedpassword123", "new_password": "hashedpassword123" }
+# sensitive_data={ "name": "testadmin2", "password": "hashedpassword123", "new_password": "hashedpassword123" }
 
-save_screenshots_path = "./task_screenshots_domexa_change_password"
+save_screenshots_path = "./task_screenshots_booking_com"
 
 
 
@@ -98,9 +98,8 @@ async def main():
     ))
     
     agent = Agent(
-        task="Goto https://app.domexa.cloud and login with name and password and password should stay hidden. Goto account settings and change password with new_password and save changes.",
+        task="Goto https://booking.com and sign-up with dummy email and password. And for dummy email, use mailinator and use email 'sajeel@mailinator.com'.",
         llm=llm,
-        sensitive_data=sensitive_data,
         save_screenshots_path=save_screenshots_path,
         browser=browser,
         save_conversation_path="logs/conversation"
