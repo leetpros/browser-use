@@ -65,6 +65,8 @@ class DomService:
 			'focusHighlightIndex': focus_element,
 			'viewportExpansion': viewport_expansion,
 		}
+		if focus_element > -1:
+			args["showHighlightIndices"] = False
 
 		eval_page = await self.page.evaluate(self.js_code, args)
 

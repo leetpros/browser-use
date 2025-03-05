@@ -3,9 +3,10 @@
     doHighlightElements: true,
     focusHighlightIndex: -1,
     viewportExpansion: 0,
+    showHighlightIndices: true,
   }
 ) => {
-  const { doHighlightElements, focusHighlightIndex, viewportExpansion } = args;
+  const { doHighlightElements, focusHighlightIndex, viewportExpansion, showHighlightIndices } = args;
   let highlightIndex = 0; // Reset highlight index
 
   // Add performance tracking
@@ -116,32 +117,21 @@
     // Create or get highlight container
     let container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
     if (!container) {
-        container = document.createElement("div");
-        container.id = HIGHLIGHT_CONTAINER_ID;
-        container.style.position = "fixed";
-        container.style.pointerEvents = "none";
-        container.style.top = "0";
-        container.style.left = "0";
-        container.style.width = "100%";
-        container.style.height = "100%";
-        container.style.zIndex = "2147483647";
-        document.body.appendChild(container);
+      container = document.createElement("div");
+      container.id = HIGHLIGHT_CONTAINER_ID;
+      container.style.position = "fixed";
+      container.style.pointerEvents = "none";
+      container.style.top = "0";
+      container.style.left = "0";
+      container.style.width = "100%";
+      container.style.height = "100%";
+      container.style.zIndex = "2147483647";
+      document.body.appendChild(container);
     }
 
     // Generate a color based on the index
     const colors = [
-      "#FF0000",
-      "#00FF00",
-      "#0000FF",
-      "#FFA500",
-      "#800080",
-      "#008080",
-      "#FF69B4",
-      "#4B0082",
-      "#FF4500",
-      "#2E8B57",
-      "#DC143C",
-      "#4682B4",
+      "#0000FF", // Blue
     ];
     const colorIndex = index % colors.length;
     const baseColor = colors[colorIndex];
@@ -149,96 +139,60 @@
 
     // Create highlight overlay
     const overlay = document.createElement("div");
-    overlay.style.position = "fixed";
-    overlay.style.border = `2px solid ${baseColor}`;
+    overlay.style.position = "absolute";
+    overlay.style.border = `3px solid ${baseColor}`;
     overlay.style.backgroundColor = backgroundColor;
     overlay.style.pointerEvents = "none";
     overlay.style.boxSizing = "border-box";
+    overlay.style.borderRadius = "5px";
+    
+    // Add padding to the highlight box
+    const padding = 5; // 5px padding on all sides
 
     // Get element position
-    const rect = element.getBoundingClientRect();
+    const rect = measureDomOperation(() => element.getBoundingClientRect(), 'getBoundingClientRect');
     let iframeOffset = { x: 0, y: 0 };
 
     // If element is in an iframe, calculate iframe offset
     if (parentIframe) {
-        const iframeRect = parentIframe.getBoundingClientRect();
-        iframeOffset.x = iframeRect.left;
-        iframeOffset.y = iframeRect.top;
+      const iframeRect = parentIframe.getBoundingClientRect();
+      iframeOffset.x = iframeRect.left;
+      iframeOffset.y = iframeRect.top;
     }
 
-    // Calculate position
-    const top = rect.top + iframeOffset.y;
-    const left = rect.left + iframeOffset.x;
+    // Calculate position with padding
+    const top = rect.top + iframeOffset.y + window.scrollY - padding;
+    const left = rect.left + iframeOffset.x + window.scrollX - padding;
+    const width = rect.width + (padding * 2);
+    const height = rect.height + (padding * 2);
 
     overlay.style.top = `${top}px`;
     overlay.style.left = `${left}px`;
-    overlay.style.width = `${rect.width}px`;
-    overlay.style.height = `${rect.height}px`;
+    overlay.style.width = `${width}px`;
+    overlay.style.height = `${height}px`;
 
     // Create and position label
     const label = document.createElement("div");
     label.className = "playwright-highlight-label";
-    label.style.position = "fixed";
+    label.style.position = "absolute";
     label.style.background = baseColor;
     label.style.color = "white";
-    label.style.padding = "1px 4px";
-    label.style.borderRadius = "4px";
-    label.style.fontSize = `${Math.min(12, Math.max(8, rect.height / 2))}px`;
+    label.style.padding = "2px 6px";
+    label.style.borderRadius = "3px";
+    label.style.fontSize = "12px";
+    label.style.fontWeight = "bold";
+    label.style.fontFamily = "Arial, sans-serif";
+    label.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
     label.textContent = index;
+    label.style.display = showHighlightIndices ? 'block' : 'none';  // Initial visibility
 
-    const labelWidth = 20;
-    const labelHeight = 16;
-
-    let labelTop = top + 2;
-    let labelLeft = left + rect.width - labelWidth - 2;
-
-    if (rect.width < labelWidth + 4 || rect.height < labelHeight + 4) {
-        labelTop = top - labelHeight - 2;
-        labelLeft = left + rect.width - labelWidth;
-    }
-
-    label.style.top = `${labelTop}px`;
-    label.style.left = `${labelLeft}px`;
+    // Position label at top-left of element with slight offset
+    label.style.top = `${top - 20}px`; // Position above the element
+    label.style.left = `${left}px`;
 
     // Add to container
     container.appendChild(overlay);
     container.appendChild(label);
-
-    // Update positions on scroll
-    const updatePositions = () => {
-        const newRect = element.getBoundingClientRect();
-        let newIframeOffset = { x: 0, y: 0 };
-        
-        if (parentIframe) {
-            const iframeRect = parentIframe.getBoundingClientRect();
-            newIframeOffset.x = iframeRect.left;
-            newIframeOffset.y = iframeRect.top;
-        }
-
-        const newTop = newRect.top + newIframeOffset.y;
-        const newLeft = newRect.left + newIframeOffset.x;
-
-        overlay.style.top = `${newTop}px`;
-        overlay.style.left = `${newLeft}px`;
-        overlay.style.width = `${newRect.width}px`;
-        overlay.style.height = `${newRect.height}px`;
-
-        let newLabelTop = newTop + 2;
-        let newLabelLeft = newLeft + newRect.width - labelWidth - 2;
-
-        if (newRect.width < labelWidth + 4 || newRect.height < labelHeight + 4) {
-            newLabelTop = newTop - labelHeight - 2;
-            newLabelLeft = newLeft + newRect.width - labelWidth;
-        }
-
-        label.style.top = `${newLabelTop}px`;
-        label.style.left = `${newLabelLeft}px`;
-    };
-
-  
-
-    window.addEventListener('scroll', updatePositions);
-    window.addEventListener('resize', updatePositions);
 
     return index + 1;
   }
