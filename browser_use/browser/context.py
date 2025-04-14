@@ -635,7 +635,7 @@ class BrowserContext:
 
 		return session.cached_state
 
-	async def _update_state(self, focus_element: int = -1) -> BrowserState:
+	async def _update_state(self, focus_element: int = -1, step_id: Optional[int] = None) -> BrowserState:
 		"""Update and return state."""
 		session = await self.get_session()
 
@@ -669,10 +669,20 @@ class BrowserContext:
 			# Save screenshot when focus element is specified
 			if focus_element > -1 and self.config.save_screenshots_path:
 				os.makedirs(self.config.save_screenshots_path, exist_ok=True)
+				
+				# Include step_id in filename if available
+				filename_prefix = f"focus_{focus_element}"
+				if step_id is not None:
+					logger.debug(f"Including step_id {step_id} in screenshot filename")
+					filename_prefix = f"step_{step_id - 1}_focus_{focus_element}"
+				else:
+					logger.debug("No step_id provided for screenshot filename")
+				
 				filename = await self._get_unique_filename(
 					self.config.save_screenshots_path,
-					f"focus_{focus_element}.png"
+					f"{filename_prefix}.png"
 				)
+				logger.debug(f"Saving screenshot as: {filename}")
 				filepath = os.path.join(self.config.save_screenshots_path, filename)
 				with open(filepath, "wb") as f:
 					f.write(base64.b64decode(screenshot_b64))
@@ -948,7 +958,7 @@ class BrowserContext:
 			logger.error(f'Failed to locate element: {str(e)}')
 			return None
 
-	async def _input_text_element_node(self, element_node: DOMElementNode, text: str):
+	async def _input_text_element_node(self, element_node: DOMElementNode, text: str, step_id: Optional[int] = None):
 		"""
 		Input text into an element with proper error handling and state management.
 		Handles different types of input fields and ensures proper element state before input.
@@ -956,7 +966,7 @@ class BrowserContext:
 		try:
 			# Highlight before typing
 			if element_node.highlight_index is not None:
-				await self._update_state(focus_element=element_node.highlight_index)
+				await self._update_state(focus_element=element_node.highlight_index, step_id=step_id)
 
 			element_handle = await self.get_locate_element(element_node)
 
@@ -984,7 +994,7 @@ class BrowserContext:
 			logger.debug(f'Failed to input text into element: {repr(element_node)}. Error: {str(e)}')
 			raise BrowserError(f'Failed to input text into index {element_node.highlight_index}')
 
-	async def _click_element_node(self, element_node: DOMElementNode) -> Optional[str]:
+	async def _click_element_node(self, element_node: DOMElementNode, step_id: Optional[int] = None) -> Optional[str]:
 		"""
 		Optimized method to click an element using xpath.
 		"""
@@ -993,7 +1003,7 @@ class BrowserContext:
 		try:
 			# Highlight before clicking
 			if element_node.highlight_index is not None:
-				await self._update_state(focus_element=element_node.highlight_index)
+				await self._update_state(focus_element=element_node.highlight_index, step_id=step_id)
 
 			element_handle = await self.get_locate_element(element_node)
 

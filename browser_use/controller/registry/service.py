@@ -93,6 +93,7 @@ class Registry(Generic[Context]):
 		available_file_paths: Optional[list[str]] = None,
 		#
 		context: Context | None = None,
+		step_id: Optional[int] = None,
 	) -> Any:
 		"""Execute a registered action"""
 		if action_name not in self.registry.actions:
@@ -119,7 +120,6 @@ class Registry(Generic[Context]):
 				raise ValueError(f'Action {action_name} requires page_extraction_llm but none provided.')
 			if 'available_file_paths' in parameter_names and not available_file_paths:
 				raise ValueError(f'Action {action_name} requires available_file_paths but none provided.')
-
 			if 'context' in parameter_names and not context:
 				raise ValueError(f'Action {action_name} requires context but none provided.')
 
@@ -135,6 +135,9 @@ class Registry(Generic[Context]):
 				extra_args['available_file_paths'] = available_file_paths
 			if action_name == 'input_text' and sensitive_data:
 				extra_args['has_sensitive_data'] = True
+			if 'step_id' in parameter_names:
+				extra_args['step_id'] = step_id
+
 			if is_pydantic:
 				return await action.function(validated_params, **extra_args)
 			return await action.function(**validated_params.model_dump(), **extra_args)

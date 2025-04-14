@@ -84,12 +84,13 @@ class Controller(Generic[Context]):
 
 		# Element Interaction Actions
 		@self.registry.action('Click element', param_model=ClickElementAction)
-		async def click_element(params: ClickElementAction, browser: BrowserContext):
+		async def click_element(params: ClickElementAction, browser: BrowserContext, step_id: Optional[int] = None):
+			logger.debug(f"click_element called with step_id: {step_id}")
 			session = await browser.get_session()
 			state = session.cached_state
 
 			if params.index not in state.selector_map:
-				raise Exception(f'Element with index {params.index} does not exist - retry or use alternative actions')
+				raise Exception(f'Element index {params.index} does not exist - retry or use alternative actions')
 
 			element_node = state.selector_map[params.index]
 			initial_pages = len(session.context.pages)
@@ -103,7 +104,7 @@ class Controller(Generic[Context]):
 			msg = None
 
 			try:
-				download_path = await browser._click_element_node(element_node)
+				download_path = await browser._click_element_node(element_node, step_id=step_id)
 				if download_path:
 					msg = f'💾  Downloaded file to {download_path}'
 				else:
@@ -125,7 +126,8 @@ class Controller(Generic[Context]):
 			'Input text into a input interactive element',
 			param_model=InputTextAction,
 		)
-		async def input_text(params: InputTextAction, browser: BrowserContext, has_sensitive_data: bool = False):
+		async def input_text(params: InputTextAction, browser: BrowserContext, has_sensitive_data: bool = False, step_id: Optional[int] = None):
+			logger.debug(f"input_text called with step_id: {step_id}")
 			session = await browser.get_session()
 			state = session.cached_state
 
@@ -133,7 +135,7 @@ class Controller(Generic[Context]):
 				raise Exception(f'Element index {params.index} does not exist - retry or use alternative actions')
 
 			element_node = state.selector_map[params.index]
-			await browser._input_text_element_node(element_node, params.text)
+			await browser._input_text_element_node(element_node, params.text, step_id=step_id)
 			if not has_sensitive_data:
 				msg = f'⌨️  Input {params.text} into index {params.index}'
 			else:
@@ -470,6 +472,7 @@ class Controller(Generic[Context]):
 		available_file_paths: Optional[list[str]] = None,
 		#
 		context: Context | None = None,
+		step_id: Optional[int] = None,
 	) -> ActionResult:
 		"""Execute an action"""
 
@@ -492,6 +495,7 @@ class Controller(Generic[Context]):
 						sensitive_data=sensitive_data,
 						available_file_paths=available_file_paths,
 						context=context,
+						step_id=step_id,
 					)
 
 					# Laminar.set_span_output(result)

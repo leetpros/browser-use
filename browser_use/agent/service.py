@@ -433,6 +433,8 @@ class Agent(Generic[Context]):
 				logger.error(f'{prefix}{error_msg}')
 				self.state.consecutive_failures += 1
 
+		print("error_msg : ", error_msg)
+
 		return [ActionResult(error=error_msg, include_in_memory=True)]
 
 	def _make_history_item(
@@ -644,6 +646,7 @@ class Agent(Generic[Context]):
 				self.sensitive_data,
 				self.settings.available_file_paths,
 				context=self.context,
+				step_id=self.state.n_steps,
 			)
 
 			results.append(result)
